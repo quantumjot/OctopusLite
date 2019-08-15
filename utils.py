@@ -20,7 +20,7 @@ __email__ = 'a.lowe@ucl.ac.uk'
 
 import os
 import time
-import serial
+# import serial
 import json
 import logging
 
@@ -114,6 +114,59 @@ def read_micromanager_stage_positions(filename):
         positions.append(sp)
 
     return positions
+
+
+def write_micromanager_stage_positions(filename, positions):
+    """ write out a micromanager compatible list of stage positions
+
+    TODO(arl): json ordering is probably important to micromanager
+    TODO(arl): clean this up
+
+    """
+
+    def convert_to_um(pos_mm):
+        return[p*1e3 for p in pos_mm]
+
+    pos_dict = {"encoding": "UTF-8",
+                "format": "Micro-Manager Property Map",
+                "major_version": 2,
+                "minor_version": 0,
+                "map":{"StagePositions": {"type": "PROPERTY_MAP", "array":[]}}}
+
+    stage_positions = []
+
+    for p_ind, pos in enumerate(positions):
+
+        p = {"DefaultXYStage": {"type": "STRING", "scalar": "XYStage"},
+             "DefaultZStage": {"type": "STRING", "scalar": "ZStage"},
+             "GridCol": {"type": "INTEGER", "scalar": 0 },
+             "GridRow": {"type": "INTEGER", "scalar": 0 },
+             "Label": {"type": "STRING", "scalar": "Pos{}".format(p_ind+1)},
+             "Properties": {"type": "PROPERTY_MAP", "scalar": {}}}
+
+        px, py, pz = convert_to_um(pos)
+
+        fw = {"Device": {"type": "STRING", "scalar": "Fast Filter Wheel"},
+              "Position_um": {"type": "DOUBLE", "array": [0.0]}}
+
+        z = {"Device": {"type": "STRING", "scalar": "ZStage"},
+             "Position_um": {"type": "DOUBLE", "array": [pz]}}
+
+        xy = {"Device": {"type": "STRING", "scalar": "XYStage"},
+              "Position_um": {"type": "DOUBLE", "array": [px, py]}}
+
+        p["DevicePositions"] = {"type": "PROPERTY_MAP", "array": [fw, z, xy]}
+
+        stage_positions.append(p)
+
+    pos_dict["map"]["StagePositions"]["array"] = stage_positions
+
+    # dump it out as a file
+    with open(filename, 'w') as json_file:
+        json.dump(pos_dict, json_file, indent=2, separators=(',', ': '))
+
+
+
 
 
 def read_experiment_params(filename="params.json"):

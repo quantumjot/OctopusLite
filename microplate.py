@@ -14,6 +14,8 @@
 # Created:  09/08/2019
 #-------------------------------------------------------------------------------
 
+import utils
+
 import numpy as np
 
 
@@ -43,7 +45,7 @@ class MicroplateWell(object):
         self.y_mm = y_mm
         self.diameter_mm = diameter_mm
 
-        self.rel_positions = []
+        self.positions = []
 
     @property
     def radius_mm(self):
@@ -53,9 +55,7 @@ class MicroplateWell(object):
     def relative_positions(self):
         pass
 
-    @property
-    def absolute_positions(self):
-        pass
+
 
 
 class Microplate(object):
@@ -78,7 +78,7 @@ class Microplate(object):
         self.rows = None
         self.columns = None
 
-        self.positions = []
+        self._wells = []
 
     @property
     def num_wells(self):
@@ -87,29 +87,52 @@ class Microplate(object):
     @property
     def wells(self):
         """ Return the well centres """
+        return self._wells
 
-        wells = []
-        for x0, y0 in serpentine(self.rows, self.columns):
+    @property
+    def positions(self):
+        positions = []
+        for well in self.wells:
+            positions+=well.positions
+        return positions
 
-            x = self.offset_mm[0]+x0*self.spacing_mm
-            y = self.offset_mm[1]+y0*self.spacing_mm
-
-            # add the well object
-            well = MicroplateWell(x, y, self.well_diameter_mm)
-            wells.append(well)
-
-        return wells
 
     def create(self,
                num_positions_per_well=1,
                z_pos=0.,
-               fov_um=(530.0,400.0)):
+               fov_mm=(0.530,0.400)):
 
-        # convert mm to encoder steps
-        mm_to_steps = lambda x: x*(1e3+10)
+        self._wells = []
+
+        # make the serperntine pattern
+        pattern = serpentine(self.rows, self.columns)
+
+        for px, py in pattern:
+            # set up the wells according to the plate configuration
+            x0, y0 = self.offset_mm
+            x = x0 + px*self.spacing_mm
+            y = y0 + py*self.spacing_mm
+
+            # add the well object
+            well = MicroplateWell(x, y, self.well_diameter_mm)
+            self._wells.append(well)
+
+        if num_positions_per_well < 1: return
+
+        # estimate the number of rows and columns for the number of positions
+        # per well
+        n = np.ceil(np.sqrt(num_positions_per_well)).astype('int')
+        pattern = serpentine(n,n)[:num_positions_per_well]
 
         for well in self.wells:
-            
+            well.positions = []
+            x0, y0 = well.x_mm - n*fov_mm[0]/2., well.y_mm - n*fov_mm[1]/2.
+            for px, py in pattern:
+                x = x0 + px*fov_mm[0]
+                y = y0 + py*fov_mm[1]
+                well.positions.append((x, y, z_pos))
+
+
 
 
 
@@ -141,14 +164,23 @@ def visualise_microplate(plate):
                   edgecolor='k', linewidth=3)
     ax.add_artist(r)
 
+    travel = []
+
     # now create the wells
     for i, well in enumerate(plate.wells):
         x, y = well.x_mm, well.y_mm
+        travel.append((x,y))
         r = well.radius_mm
         c = plt.Circle((x, y), r, edgecolor='k', fill=False)
         ax.add_artist(c)
         txt = ax.text(x-r, y-r, str(i+1), color='k')
 
+        # now plot the positions for imaging
+        x, y, z = zip(*well.positions)
+        plt.plot(x, y, 'b.-')
+
+    tx, ty = zip(*travel)
+    plt.plot(tx, ty, 'r:')
 
     plt.axis("image")
     plt.xlim([-5, plate.width_mm+5])
@@ -157,11 +189,9 @@ def visualise_microplate(plate):
 
 
 if __name__ == "__main__":
-
-    s = serpentine(10,10)
-    print s
-
     plate = Microplate24Well()
-    plate.create(num_positions_per_well=4)
+    plate.create(num_positions_per_well=16)
 
+    test_fn = "./data/microplate.pos"
+    utils.write_micromanager_stage_positions(test_fn, plate.positions)
     visualise_microplate(plate)
