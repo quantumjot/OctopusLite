@@ -27,10 +27,11 @@ def serpentine(rows, columns):
     columns = range(columns)
 
     pos = []
-    for row in rows:
-        for column in columns:
+
+    for column in columns:
+        for row in rows:
             pos.append((row,column))
-        columns.reverse()
+        rows.reverse()
 
     return pos
 
@@ -69,8 +70,8 @@ class Microplate(object):
 
     """
     def __init__(self):
-        self.width_mm = 85.0
-        self.height_mm = 127.5
+        self.width_mm = 127.5
+        self.height_mm = 85.0
 
         self.offset_mm = None
         self.spacing_mm = None
@@ -150,10 +151,10 @@ class Microplate24Well(Microplate):
     def __init__(self):
         Microplate.__init__(self)
 
-        self.rows = 4
-        self.columns = 6
+        self.rows = 6
+        self.columns = 4
         self.spacing_mm = 18.9
-        self.offset_mm = [14.4, 16.5]
+        self.offset_mm = [16.5, 14.4]
         self.well_diameter_mm = 16.3
 
 
@@ -166,7 +167,7 @@ def visualise_microplate(plate):
     import matplotlib.pyplot as plt
     import matplotlib.patheffects as PathEffects
 
-    fig, ax = plt.subplots(1, figsize=(10,16))
+    fig, ax = plt.subplots(1, figsize=(8,5))
 
     # create a microplate boundary
     r = plt.Rectangle((0,0), plate.width_mm, plate.height_mm, fill=False,

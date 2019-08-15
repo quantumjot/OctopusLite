@@ -1,7 +1,7 @@
 notebooks/*
 data/*
 
-*.DS_store
+*.DS_Store
 *.o
 *.so
 *.dylib
