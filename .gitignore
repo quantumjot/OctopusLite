@@ -1,0 +1,10 @@
+notebooks/*
+data/*
+
+*.DS_store
+*.o
+*.so
+*.dylib
+*.pyc
+*.pos
+tifffile.py
