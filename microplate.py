@@ -137,6 +137,10 @@ class Microplate(object):
         """ proxy for visualising the plate """
         visualise_microplate(self)
 
+    def export(self, filename):
+        """ export the positions to micromanager """
+        utils.write_micromanager_stage_positions(filename, self.positions)
+
 
 
 
@@ -198,5 +202,6 @@ if __name__ == "__main__":
     plate.create(num_positions_per_well=16)
 
     test_fn = "./data/microplate.pos"
-    utils.write_micromanager_stage_positions(test_fn, plate.positions)
-    visualise_microplate(plate)
+    plate.export(test_fn)
+
+    plate.visualise()
