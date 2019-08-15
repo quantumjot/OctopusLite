@@ -133,6 +133,11 @@ class Microplate(object):
                 well.positions.append((x, y, z_pos))
 
 
+    def visualise(self):
+        """ proxy for visualising the plate """
+        visualise_microplate(self)
+
+
 
 
 
