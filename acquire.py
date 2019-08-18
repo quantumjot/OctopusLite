@@ -282,7 +282,7 @@ def acquire(config):
             for t, trigger in enumerate(config.triggers):
                 channel_fn = os.path.join(pos_pth, image_fn(image_num, p, t))
 
-                logger.info(" - Acquiring {} image...".format(trigger.name))
+                logger.info(" - [{}/{}; {}] Acquiring {}...".format(image_num, config.num_images, p, trigger.name))
                 channel_im = trigger()
                 # store the image in the cache
                 cache.append((channel_fn, channel_im))
