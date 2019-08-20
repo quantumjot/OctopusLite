@@ -37,6 +37,12 @@ logger = logging.getLogger('octopuslite_logger')
 
 
 
+class AcquisitionPoint(object):
+    def __init__(self):
+        pass
+
+
+
 class AcquisitionManager(object):
     """ AcquisitionManager
 
@@ -227,10 +233,9 @@ def image_fn(im_num=0, pos_num=0, channel_num=0, z_num=0):
 
 
 
-# def acquire(position_list, num_images=500, period_s=4*60):
 def acquire(manager):
 
-    # # make sure that the destination folder exists
+    # make sure that the destination folder exists
     utils.check_and_makedir(manager.path)
 
     # set up micromanager
@@ -248,20 +253,23 @@ def acquire(manager):
     logger.info(" NEW IMAGE ACQUISITION ")
     logger.info("=============================================================")
 
-
-    # make a list of positions
-    for p, pos in enumerate(manager.stage_positions):
-        # create folders for those positions
-        pos_pth = os.path.join(manager.path, "Pos{}".format(p))
-        logger.info("Creating position folder {}".format(pos_pth))
-        utils.check_and_makedir(pos_pth)
-
     # initialize all of the triggers
     manager.initialize_acquisition(mmc=mmc, prior=proscan)
 
     # make an image cache
     w, h = mmc.getImageWidth(), mmc.getImageHeight()
 
+    # create directories for position and channel
+    for p, pos in enumerate(manager.stage_positions):
+        # create folders for those positions
+        pos_pth = os.path.join(manager.path, "Pos{}".format(p))
+        logger.info("Creating position folder {}".format(pos_pth))
+        utils.check_and_makedir(pos_pth)
+
+        # in each position folder, make a channel folder
+        for trigger in manager.triggers:
+            chnl_pth = os.path.join(pos_pth, trigger.name)
+            utils.check_and_makedir(pos_pth)
 
     # loop over the images to be collected
     while image_num < manager.num_images:
@@ -286,7 +294,8 @@ def acquire(manager):
 
             # cycle through each of the triggers in order
             for t, trigger in enumerate(manager.triggers):
-                channel_fn = os.path.join(pos_pth, image_fn(image_num, p, t))
+                chnl_pth = os.path.join(pos_pth, trigger.name)
+                channel_fn = os.path.join(chnl_pth, image_fn(image_num, p, t))
 
                 logger.info(" - [{}/{}; {}] Acquiring {}...".format(image_num, manager.num_images, p, trigger.name))
                 channel_im = trigger()
