@@ -98,6 +98,10 @@ class Timeout(object):
     def elapsed(self):
         return time.time() - self._start
 
+    @property
+    def remaining(self):
+        self._timeout-self.elapsed
+
 
 
 def read_micromanager_stage_positions(filename):

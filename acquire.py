@@ -26,6 +26,7 @@ import logging
 import utils
 import prior
 import triggers
+import micromanager
 # import rpcclient
 
 import tifffile
@@ -46,7 +47,23 @@ def image_filename(im_num=0, pos_num=0, channel_num=0, z_num=0):
     return filename.format(channel_num, pos_num, im_num, z_num)
 
 
+def setup_logger(log_path):
+    # if we don't have any handlers, set one up
+    if not logger.handlers:
+        # configure stream handler
+        logfmt = '[%(levelname)s][%(asctime)s] %(message)s'
+        log_formatter = logging.Formatter(logfmt, datefmt='%Y/%m/%d %I:%M:%S %p')
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(log_formatter)
+        logger.addHandler(console_handler)
 
+        log_file = os.path.join(log_path, 'acquisition_log.log')
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(log_formatter)
+        logger.addHandler(file_handler)
+
+        logger.setLevel(logging.DEBUG)
+        return log_file
 
 
 
@@ -205,7 +222,6 @@ class AcquisitionManager(object):
             # add the acquisition object to the list of positions
             self.positions.append(acq)
 
-
     def initialize_acquisition(self, mmc=None, prior=None):
         """ Initialize the acquisition """
 
@@ -221,8 +237,6 @@ class AcquisitionManager(object):
         for acq in self.positions:
             logger.info("Creating position folder {}".format(acq.folder))
             utils.check_and_makedir(acq.folder)
-
-
 
     def acquire(self):
         # start an acquisition by turning off the joystick
@@ -277,111 +291,19 @@ class AcquisitionManager(object):
 
 
 
-
-
-def setup_micromanager():
-    import sys
-    sys.path.append("C:\\Program Files\\Micro-Manager-2.0gamma")
-    import MMCorePy
-    mmc = MMCorePy.CMMCore()  # Instance micromanager core
-    mmc.getVersionInfo()
-
-    # set up the camera and niji
-    mmc.loadDevice('Grasshopper3', 'PointGrey', 'Grasshopper3 GS3-U3-91S6M_14103093')
-    mmc.loadDevice('COM9', 'SerialManager', 'COM9')
-    mmc.loadDevice('niji', 'BlueboxOptics_niji', 'niji')
-
-    # set up serial port for niji
-    mmc.setProperty('COM9', 'AnswerTimeout', '500.0000')
-    mmc.setProperty('COM9', 'BaudRate', '115200')
-    mmc.setProperty('COM9', 'DataBits', '8')
-    mmc.setProperty('COM9', 'DelayBetweenCharsMs', '0.0000')
-    mmc.setProperty('COM9', 'Fast USB to Serial', 'Disable')
-    mmc.setProperty('COM9', 'Handshaking', 'Off')
-    mmc.setProperty('COM9', 'Parity', 'None')
-    mmc.setProperty('COM9', 'StopBits', '1')
-    mmc.setProperty('COM9', 'Verbose', '1')
-    mmc.setProperty('niji', 'Port', 'COM9')
-
-    # initialize all of the devices
-    mmc.initializeAllDevices()
-
-    # make sure we use 2x2 binning on the camera as default
-    mmc.setProperty('Grasshopper3', 'Use Advanced Mode?', 'Yes')
-    mmc.setProperty('Grasshopper3', 'Format-7 Mode', 'Mode-1')
-    mmc.setProperty('Grasshopper3', 'PixelType', '8-bit')
-
-    # niji settings
-    mmc.setProperty('niji', 'Channel3Intensity', '20')  # GFP
-    mmc.setProperty('niji', 'Channel5Intensity', '20')  # RFP
-    mmc.setProperty('niji', 'Channel6Intensity', '20')  # iRFP
-    mmc.setProperty('niji', 'Channel3State', '0')
-    mmc.setProperty('niji', 'Channel5State', '0')
-    mmc.setProperty('niji', 'Channel6State', '0')
-    mmc.setProperty('niji', 'TriggerSource', 'Internal')
-    mmc.setProperty('niji', 'State', '0')
-
-    # set the camera to be the grasshopper
-    mmc.setCameraDevice('Grasshopper3')
-
-    return mmc
-
-
-
-
-
-
-
-def setup_logger(log_path):
-    # if we don't have any handlers, set one up
-    if not logger.handlers:
-        # configure stream handler
-        logfmt = '[%(levelname)s][%(asctime)s] %(message)s'
-        log_formatter = logging.Formatter(logfmt, datefmt='%Y/%m/%d %I:%M:%S %p')
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(log_formatter)
-        logger.addHandler(console_handler)
-
-        log_file = os.path.join(log_path, 'acquisition_log.log')
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(log_formatter)
-        logger.addHandler(file_handler)
-
-        logger.setLevel(logging.DEBUG)
-
-        return log_file
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def acquire(manager):
-
     # make sure that the destination folder exists
     utils.check_and_makedir(manager.path)
 
     # set up micromanager
-    mmc = setup_micromanager()
+    mmc = micromanager.setup_micromanager()
     log_file = setup_logger(manager.path)
 
     # set up the stage controller, using device configurations
     devices = [(prior.PriorXYStage, prior.H117EX_config),
                (prior.PriorZStage, prior.FB203E_config)]
-               
-    proscan = prior.ProScanController(devices)
+
+    proscan = prior.ProScanController(devices=devices)
 
     # make a banner for the log file
     logger.info("=============================================================")
@@ -407,14 +329,14 @@ def acquire(manager):
         # manager.update()
 
         while timeout.active:
-            remaining = int(manager.delay_s-timeout.elapsed)
-            if remaining % 30 == 0:
-                logger.info("Time remaining: {}s".format(remaining))
+            if int(timeout.remaining) % 30 == 0:
+                logger.info("Time remaining: {}s".format(timeout.remaining))
                 time.sleep(1)
 
 
     logger.info("Acquitison complete.")
     manager.write_logs()
+
 
 
 if __name__ == "__main__":
