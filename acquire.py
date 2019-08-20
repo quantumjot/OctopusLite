@@ -35,11 +35,105 @@ import tifffile
 # get the logger instance
 logger = logging.getLogger('octopuslite_logger')
 
+# use a consistent naming convention
+def image_filename(im_num=0, pos_num=0, channel_num=0, z_num=0):
+    """ create a filename based on the image number, position, channel and z
+
+    Micro-manager format:
+        img_channel000_position001_time000000002_z000.tif
+    """
+    filename = "img_channel{0:03d}_position{1:03d}_time{2:09d}_z{3:03d}.tif"
+    return filename.format(channel_num, pos_num, im_num, z_num)
 
 
-class AcquisitionPoint(object):
-    def __init__(self):
-        pass
+
+
+
+
+
+
+class AcquisitionObject(object):
+    """ AcquisitionObject
+
+    Container for an XYZ position with associated triggers. Takes care of
+    position specific functions, such as moving to the position and running
+    position specific triggers.
+
+    Can be 'borrowed' by a command server to remotely drive the microscope.
+
+    """
+    def __init__(self, acquisitionid):
+
+        self.id = acquisitionid
+        self.path = None
+        self.position = None
+        self.triggers = []
+        self.log = []
+        self.cache = []
+
+        self._stage_controller = None
+
+        self.num_images = 1
+        self._counter = 0
+
+    def __len__(self):
+        return len(self.cache)
+
+    @property
+    def stage_controller(self): return self._stage_controller
+    @stage_controller.setter
+    def stage_controller(self, stage_controller):
+        assert(isinstance(stage_controller, prior.ProScanController))
+        self._stage_controller = stage_controller
+
+    @property
+    def folder(self):
+        return os.path.join(self.path, "Pos{}".format(self.id))
+
+    @property
+    def active(self):
+        return self.image_num < self.num_images
+
+    @property
+    def image_num(self):
+        return self._counter
+
+    def write_log(self):
+        """ write a log """
+
+        # TODO(arl):
+        with open(os.path.join(self.path, "log.txt", 'w')) as log_file:
+            pass
+
+    def write_images(self):
+        """ write out images from the cache """
+        while self.cache:
+            # pop the first and write it out
+            fn, image = self.cache.pop(0)
+            tifffile.imwrite(fn, image)
+
+    def goto(self, proscan):
+        """ move to the position """
+        self._stage_controller.goto(self.position)
+
+    def acquire(self):
+        """ run the acquisition """
+        for t, trigger in enumerate(self.triggers):
+            channel_img = trigger()
+            image_fn = image_filename(self.image_num, self.id, t)
+            channel_fn = os.path.join(self.folder, image_fn)
+            self.cache.append((channel_fn, channel_img))
+
+        self._counter += 1
+
+    def goto_and_acquire(self):
+        """ goto the position and acquire the images """
+        logger.info("Acquiring position {} ({:04d}/{:04d})".format(self.id, self.image_num, self.num_images))
+        self.goto()
+        self.acquire()
+
+
+
 
 
 
@@ -52,24 +146,23 @@ class AcquisitionManager(object):
     """
 
     def __init__(self):
-        self.num_images = 0
+        self.num_images = 1
         self.delay_s = 240
-        self._triggers = []
-        self._positions = []
         self._params = None
+        self._triggers = []
 
-    @property
-    def triggers(self):
-        return self._triggers
+        self.positions = []
 
-    @property
-    def stage_positions(self):
-        return self._positions
+        # self.rpcclient = rpcclient.OctopusRPCClient()
 
     @property
     def path(self):
         return self._path
 
+    @property
+    def active(self):
+        """ are any of the positions still active? """
+        return any([acq.active for acq in self.positions])
 
     def from_dict(self, params):
         """ set up the configuration from a dictionary """
@@ -98,18 +191,63 @@ class AcquisitionManager(object):
         position_list = utils.read_micromanager_stage_positions(position_fn)
 
         # make a list of positions
-        self._positions = []
-        for p, pos in enumerate(position_list):
-            x = int(pos['XYStage'][0])
-            y = int(pos['XYStage'][1])
-            z = int(pos['ZStage'][0] * 10.0)    # TODO(arl): get Z-resolution
-            self._positions.append((x,y,z))
+        for pos_id, pos_um in enumerate(position_list):
+            x = int(pos_um['XYStage'][0])
+            y = int(pos_um['XYStage'][1])
+            z = int(pos_um['ZStage'][0] * 10.0)    # TODO(arl): get Z-resolution
+
+            # make an acquisition object
+            acq = AcquisitionObject(pos_id)
+            acq.position = (x,y,z)
+            acq.triggers = self._triggers
+            acq.num_images = self.num_images
+
+            # add the acquisition object to the list of positions
+            self.positions.append(acq)
 
 
-    def initialize_acquisition(self, **kwargs):
+    def initialize_acquisition(self, mmc=None, prior=None):
         """ Initialize the acquisition """
+
+        # initialize the triggers
         for trigger in self.triggers:
             trigger.initialize(**kwargs)
+
+        # add the stage controller to the positions
+        for acq in self.positions:
+            acq.stage_controller = prior
+
+        # make folders for the acquisitions
+        for acq in self.positions:
+            logger.info("Creating position folder {}".format(acq.folder))
+            utils.check_and_makedir(acq.folder)
+
+
+
+    def acquire(self):
+        # start an acquisition by turning off the joystick
+        # proscan.disable_joystick()
+
+        for acq in self.positions if acq.active:
+            acq.goto_and_acquire()
+
+        # return to the first position to wait
+        # get the first index of an active acquisition
+        active = [p.active for p in self.positions]
+        if active: active[0].goto()
+
+        # turn the joystick back on
+        # proscan.enable_joystick()
+
+    def write_image(self):
+        logger.info("Writing images to disk from cache...")
+        for acq in self.positions if acq.active:
+            acq.write_images()
+
+    def write_logs(self):
+        logger.info("Writing acquisition logs...")
+        for acq in self.positions:
+            acq.write_log()
 
     @staticmethod
     def load_config(filename="params.json"):
@@ -132,10 +270,8 @@ class AcquisitionManager(object):
         return manager
 
     def update(self):
+        # self.rpcclient.update(self.positions)
         pass
-
-
-
 
 
 
@@ -218,14 +354,13 @@ def setup_logger(log_path):
 
 
 
-def image_fn(im_num=0, pos_num=0, channel_num=0, z_num=0):
-    """ create a filename based on the image number, position, channel and z
 
-    Micro-manager format:
-        img_channel000_position001_time000000002_z000.tif
-    """
-    filename = "img_channel{0:03d}_position{1:03d}_time{2:09d}_z{3:03d}.tif"
-    return filename.format(channel_num, pos_num, im_num, z_num)
+
+
+
+
+
+
 
 
 
@@ -245,78 +380,28 @@ def acquire(manager):
     # set up the stage controller
     proscan = prior.ProScanController()
 
-    # set the image counter to zero
-    image_num = 0
-
     # make a banner for the log file
     logger.info("=============================================================")
-    logger.info(" NEW IMAGE ACQUISITION ")
+    logger.info(" NEW TIME-LAPSE ACQUISITION ")
     logger.info("=============================================================")
 
     # initialize all of the triggers
-    manager.initialize_acquisition(mmc=mmc, prior=proscan)
+    manager.initialize_acquisition(mmc=mmc, stage=proscan)
 
     # make an image cache
-    w, h = mmc.getImageWidth(), mmc.getImageHeight()
-
-    # create directories for position and channel
-    for p, pos in enumerate(manager.stage_positions):
-        # create folders for those positions
-        pos_pth = os.path.join(manager.path, "Pos{}".format(p))
-        logger.info("Creating position folder {}".format(pos_pth))
-        utils.check_and_makedir(pos_pth)
-
-        # in each position folder, make a channel folder
-        for trigger in manager.triggers:
-            chnl_pth = os.path.join(pos_pth, trigger.name)
-            utils.check_and_makedir(pos_pth)
+    # w, h = mmc.getImageWidth(), mmc.getImageHeight()
 
     # loop over the images to be collected
-    while image_num < manager.num_images:
-
-        # give the user a status update
-        logger.info("Acquiring image set {} of {}".format(image_num, manager.num_images))
-
-        # start an acquisition by turning off the joystick
-        # proscan.disable_joystick()
-
-        # reset the cache
-        cache = []
+    while manager.active:
 
         # run the acquisition here
         timeout = utils.Timeout(timeout_seconds=manager.delay_s)
-        for p, pos in enumerate(manager.stage_positions):
-            # select the correct folder
-            pos_pth = os.path.join(manager.path, "Pos{}".format(p))
 
-            # send the stage to the correct position
-            proscan.goto(pos)
-
-            # cycle through each of the triggers in order
-            for t, trigger in enumerate(manager.triggers):
-                chnl_pth = os.path.join(pos_pth, trigger.name)
-                channel_fn = os.path.join(chnl_pth, image_fn(image_num, p, t))
-
-                logger.info(" - [{}/{}; {}] Acquiring {}...".format(image_num, manager.num_images, p, trigger.name))
-                channel_im = trigger()
-                # store the image in the cache
-                cache.append((channel_fn, channel_im))
-
-        # return to the initial position
-        proscan.goto(manager.stage_positions[0])
-
-        # turn the joystick back on
-        # proscan.enable_joystick()
-
-        # now write out the images while we're waiting
-        logger.info("Writing images to disk from cache...")
-        for fn, image in cache:
-            logger.info(" - "+fn)
-            # tifffile.imwrite(fn, image.astype('uint8'), compress=6)
-            tifffile.imwrite(fn, image)
+        # run the acquisition
+        manager.acquire()
 
         # send images to command server
-        manager.update(cache)
+        # manager.update()
 
         while timeout.active:
             remaining = int(manager.delay_s-timeout.elapsed)
@@ -324,7 +409,9 @@ def acquire(manager):
                 logger.info("Time remaining: {}s".format(remaining))
                 time.sleep(1)
 
-        image_num+=1
+
+    logger.info("Acquitison complete.")
+    manager.write_logs()
 
 
 if __name__ == "__main__":
