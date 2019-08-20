@@ -377,8 +377,11 @@ def acquire(manager):
     mmc = setup_micromanager()
     log_file = setup_logger(manager.path)
 
-    # set up the stage controller
-    proscan = prior.ProScanController()
+    # set up the stage controller, using device configurations
+    devices = [(prior.PriorXYStage, prior.H117EX_config),
+               (prior.PriorZStage, prior.FB203E_config)]
+               
+    proscan = prior.ProScanController(devices)
 
     # make a banner for the log file
     logger.info("=============================================================")
