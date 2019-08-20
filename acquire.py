@@ -26,6 +26,7 @@ import logging
 import utils
 import prior
 import triggers
+# import rpcclient
 
 import tifffile
 # import numpy as np
@@ -36,10 +37,12 @@ logger = logging.getLogger('octopuslite_logger')
 
 
 
-class AcquisitionConfig(object):
-    """ AcquisitionConfig
+class AcquisitionManager(object):
+    """ AcquisitionManager
 
-    A configuration for a timelapse acquisition.
+    A manager for timelapse acquisition. Can either be configured once, for a
+    static acqusition, or communicate with a server.
+
     """
 
     def __init__(self):
@@ -103,24 +106,27 @@ class AcquisitionConfig(object):
             trigger.initialize(**kwargs)
 
     @staticmethod
-    def load(filename="params.json"):
+    def load_config(filename="params.json"):
         """ load a config from an experimental parameter file """
 
         # read the parameters from the file
         logger.info("Reading experiment configuration file...")
         params = utils.read_experiment_params(filename)
-        config = AcquisitionConfig()
-        config.from_dict(params)
+        manager = AcquisitionManager()
+        manager.from_dict(params)
 
         # set up the triggers
         logger.info("Configuring triggers...")
-        config.build_triggers()
+        manager.build_triggers()
 
         # read the stage positions
         logger.info("Configuring stage positions...")
-        config.build_positions()
+        manager.build_positions()
 
-        return config
+        return manager
+
+    def update(self):
+        pass
 
 
 
@@ -222,14 +228,14 @@ def image_fn(im_num=0, pos_num=0, channel_num=0, z_num=0):
 
 
 # def acquire(position_list, num_images=500, period_s=4*60):
-def acquire(config):
+def acquire(manager):
 
     # # make sure that the destination folder exists
-    utils.check_and_makedir(config.path)
+    utils.check_and_makedir(manager.path)
 
     # set up micromanager
     mmc = setup_micromanager()
-    log_file = setup_logger(config.path)
+    log_file = setup_logger(manager.path)
 
     # set up the stage controller
     proscan = prior.ProScanController()
@@ -244,24 +250,24 @@ def acquire(config):
 
 
     # make a list of positions
-    for p, pos in enumerate(config.stage_positions):
+    for p, pos in enumerate(manager.stage_positions):
         # create folders for those positions
-        pos_pth = os.path.join(config.path, "Pos{}".format(p))
+        pos_pth = os.path.join(manager.path, "Pos{}".format(p))
         logger.info("Creating position folder {}".format(pos_pth))
         utils.check_and_makedir(pos_pth)
 
     # initialize all of the triggers
-    config.initialize_acquisition(mmc=mmc, prior=proscan)
+    manager.initialize_acquisition(mmc=mmc, prior=proscan)
 
     # make an image cache
     w, h = mmc.getImageWidth(), mmc.getImageHeight()
 
 
     # loop over the images to be collected
-    while image_num < config.num_images:
+    while image_num < manager.num_images:
 
         # give the user a status update
-        logger.info("Acquiring image set {} of {}".format(image_num, config.num_images))
+        logger.info("Acquiring image set {} of {}".format(image_num, manager.num_images))
 
         # start an acquisition by turning off the joystick
         # proscan.disable_joystick()
@@ -270,25 +276,25 @@ def acquire(config):
         cache = []
 
         # run the acquisition here
-        timeout = utils.Timeout(timeout_seconds=config.delay_s)
-        for p, pos in enumerate(config.stage_positions):
+        timeout = utils.Timeout(timeout_seconds=manager.delay_s)
+        for p, pos in enumerate(manager.stage_positions):
             # select the correct folder
-            pos_pth = os.path.join(config.path, "Pos{}".format(p))
+            pos_pth = os.path.join(manager.path, "Pos{}".format(p))
 
             # send the stage to the correct position
             proscan.goto(pos)
 
             # cycle through each of the triggers in order
-            for t, trigger in enumerate(config.triggers):
+            for t, trigger in enumerate(manager.triggers):
                 channel_fn = os.path.join(pos_pth, image_fn(image_num, p, t))
 
-                logger.info(" - [{}/{}; {}] Acquiring {}...".format(image_num, config.num_images, p, trigger.name))
+                logger.info(" - [{}/{}; {}] Acquiring {}...".format(image_num, manager.num_images, p, trigger.name))
                 channel_im = trigger()
                 # store the image in the cache
                 cache.append((channel_fn, channel_im))
 
         # return to the initial position
-        proscan.goto(config.stage_positions[0])
+        proscan.goto(manager.stage_positions[0])
 
         # turn the joystick back on
         # proscan.enable_joystick()
@@ -300,8 +306,11 @@ def acquire(config):
             # tifffile.imwrite(fn, image.astype('uint8'), compress=6)
             tifffile.imwrite(fn, image)
 
+        # send images to command server
+        manager.update(cache)
+
         while timeout.active:
-            remaining = int(config.delay_s-timeout.elapsed)
+            remaining = int(manager.delay_s-timeout.elapsed)
             if remaining % 30 == 0:
                 logger.info("Time remaining: {}s".format(remaining))
                 time.sleep(1)
@@ -312,5 +321,5 @@ def acquire(config):
 if __name__ == "__main__":
 
     # load the configuration and start the acquistion
-    config = AcquisitionConfig.load()
-    acquire(config)
+    manager = AcquisitionManager.load_config()
+    acquire(manager)
