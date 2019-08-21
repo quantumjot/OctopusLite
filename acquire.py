@@ -117,7 +117,6 @@ class AcquisitionObject(object):
 
     def write_log(self):
         """ write a log """
-
         # TODO(arl):
         with open(os.path.join(self.path, "log.txt", 'w')) as log_file:
             pass
@@ -129,7 +128,7 @@ class AcquisitionObject(object):
             fn, image = self.cache.pop(0)
             tifffile.imwrite(fn, image)
 
-    def goto(self, proscan):
+    def goto(self):
         """ move to the position """
         self._stage_controller.goto(self.position)
 
