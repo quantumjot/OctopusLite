@@ -20,7 +20,7 @@ __email__ = 'a.lowe@ucl.ac.uk'
 
 import os
 import time
-# import serial
+import serial
 import json
 import logging
 
@@ -100,7 +100,7 @@ class Timeout(object):
 
     @property
     def remaining(self):
-        self._timeout-self.elapsed
+        return self._timeout-self.elapsed
 
 
 

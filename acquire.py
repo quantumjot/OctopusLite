@@ -176,9 +176,13 @@ class AcquisitionManager(object):
         return self._path
 
     @property
+    def triggers(self):
+        return self._triggers
+
+    @property
     def active(self):
         """ are any of the positions still active? """
-        return any([acq.active for acq in self.positions])
+        return [acq for acq in self.positions if acq.active]
 
     def from_dict(self, params):
         """ set up the configuration from a dictionary """
@@ -217,20 +221,21 @@ class AcquisitionManager(object):
             acq.position = (x,y,z)
             acq.triggers = self._triggers
             acq.num_images = self.num_images
+            acq.path = self.path
 
             # add the acquisition object to the list of positions
             self.positions.append(acq)
 
-    def initialize_acquisition(self, mmc=None, prior=None):
+    def initialize_acquisition(self, mmc=None, stage=None):
         """ Initialize the acquisition """
 
         # initialize the triggers
         for trigger in self.triggers:
-            trigger.initialize(**kwargs)
+            trigger.initialize(mmc=mmc, stage=stage)
 
         # add the stage controller to the positions
         for acq in self.positions:
-            acq.stage_controller = prior
+            acq.stage_controller = stage
 
         # make folders for the acquisitions
         for acq in self.positions:
@@ -241,20 +246,22 @@ class AcquisitionManager(object):
         # start an acquisition by turning off the joystick
         # proscan.disable_joystick()
 
-        for acq in self.positions if acq.active:
+        # get the active positions
+        for acq in self.active:
             acq.goto_and_acquire()
 
         # return to the first position to wait
-        # get the first index of an active acquisition
-        active = [p.active for p in self.positions]
-        if active: active[0].goto()
+        if self.active: self.active[0].goto()
+
+        # now write out the images
+        self.write_images()
 
         # turn the joystick back on
         # proscan.enable_joystick()
 
-    def write_image(self):
+    def write_images(self):
         logger.info("Writing images to disk from cache...")
-        for acq in self.positions if acq.active:
+        for acq in self.positions:
             acq.write_images()
 
     def write_logs(self):
@@ -329,7 +336,7 @@ def acquire(manager):
 
         while timeout.active:
             if int(timeout.remaining) % 30 == 0:
-                logger.info("Time remaining: {}s".format(timeout.remaining))
+                logger.info("Remaining: {}s".format(int(timeout.remaining)))
                 time.sleep(1)
 
 
