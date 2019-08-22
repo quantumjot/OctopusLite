@@ -346,7 +346,6 @@ def acquire(manager):
 
 
 if __name__ == "__main__":
-
     # load the configuration and start the acquistion
     manager = AcquisitionManager.load_config()
     acquire(manager)
