@@ -30,10 +30,10 @@ import MMCorePy
 logger = logging.getLogger('octopuslite_logger')
 
 
-def setup_micromanager():
+def get_micromanager_instance():
     # TODO(arl): load a micromanager config from file?
 
-    mmc = MMCorePy.CMMCore()  # Instance micromanager core
+    mmc = MMCorePy.CMMCore()  # get micromanager core instance
     mmc_version = mmc.getVersionInfo()
 
     logger.info("Imported MMCore v{}".format(mmc_version))
@@ -42,6 +42,7 @@ def setup_micromanager():
     mmc.loadDevice('Grasshopper3', 'PointGrey', 'Grasshopper3 GS3-U3-91S6M_14103093')
     mmc.loadDevice('COM9', 'SerialManager', 'COM9')
     mmc.loadDevice('niji', 'BlueboxOptics_niji', 'niji')
+    mmc.loadDevice('Fast Filter Wheel', 'ThorlabsAPTStage', 'BSC101')
 
     # set up serial port for niji
     mmc.setProperty('COM9', 'AnswerTimeout', '500.0000')
@@ -54,6 +55,12 @@ def setup_micromanager():
     mmc.setProperty('COM9', 'StopBits', '1')
     mmc.setProperty('COM9', 'Verbose', '1')
     mmc.setProperty('niji', 'Port', 'COM9')
+
+    # set up the filter wheel
+    mmc.setProperty('Fast Filter Wheel', 'Channel', '1')
+    mmc.setProperty('Fast Filter Wheel', 'Position Lower Limit (um)','0.0000')
+    mmc.setProperty('Fast Filter Wheel', 'Position Upper Limit (um)','360000.0000')
+    mmc.setProperty('Fast Filter Wheel', 'Serial Number', '40876841')
 
     # initialize all of the devices
     mmc.initializeAllDevices()

@@ -25,6 +25,7 @@ import logging
 
 import utils
 import prior
+import filterwheel
 import triggers
 import micromanager
 # import rpcclient
@@ -226,12 +227,15 @@ class AcquisitionManager(object):
             # add the acquisition object to the list of positions
             self.positions.append(acq)
 
-    def initialize_acquisition(self, mmc=None, stage=None):
+    def initialize_acquisition(self, mmc=None, stage=None, fw=None):
         """ Initialize the acquisition """
+
+        # intialize the filter wheel
+        fw.initialize(mmc=mmc)
 
         # initialize the triggers
         for trigger in self.triggers:
-            trigger.initialize(mmc=mmc, stage=stage)
+            trigger.initialize(mmc=mmc, stage=stage, fw=fw)
 
         # add the stage controller to the positions
         for acq in self.positions:
@@ -302,14 +306,16 @@ def acquire(manager):
     utils.check_and_makedir(manager.path)
 
     # set up micromanager
-    mmc = micromanager.setup_micromanager()
+    mmc = micromanager.get_micromanager_instance()
     log_file = setup_logger(manager.path)
 
     # set up the stage controller, using device configurations
     devices = [(prior.PriorXYStage, prior.H117EX_config),
                (prior.PriorZStage, prior.FB203E_config)]
-
     proscan = prior.ProScanController(devices=devices)
+
+    # set up the emission filter wheel
+    filter_wheel = filterwheel.FilterWheel()
 
     # make a banner for the log file
     logger.info("=============================================================")
@@ -317,7 +323,7 @@ def acquire(manager):
     logger.info("=============================================================")
 
     # initialize all of the triggers
-    manager.initialize_acquisition(mmc=mmc, stage=proscan)
+    manager.initialize_acquisition(mmc=mmc, stage=proscan, fw=filter_wheel)
 
     # make an image cache
     # w, h = mmc.getImageWidth(), mmc.getImageHeight()
@@ -346,6 +352,7 @@ def acquire(manager):
 
 
 if __name__ == "__main__":
+
     # load the configuration and start the acquistion
     manager = AcquisitionManager.load_config()
     acquire(manager)
