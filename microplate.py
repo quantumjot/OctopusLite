@@ -16,6 +16,7 @@
 
 import utils
 
+import heapq
 import numpy as np
 
 
@@ -34,6 +35,40 @@ def serpentine(rows, columns):
         rows.reverse()
 
     return pos
+
+
+def custom_plate_config(raw_positions):
+    """ positions should be 1-6, A-D e.g. 3C """
+    assert(isinstance(raw_positions, list))
+
+    # # make sure we don't have any duplicates and order them
+    raw_positions = list(set(raw_positions))
+    raw_positions.sort(key=lambda p: p[1])
+
+    COLUMNS = ['A','B','C','D']
+    index_to_row_col = lambda s: (int(s[0])-1, int(COLUMNS.index(s[1])))
+
+    pos = []
+
+    for position in raw_positions:
+        row, col = index_to_row_col(position)
+        assert(row>=0 and row<6 and col>=0 and col<4)
+        pos.append((row,col))
+
+    pos = greedy_optimize(pos)
+
+    return pos
+
+
+
+def greedy_optimize(positions):
+    """ do a greedy optimisation to find the optimal layout """
+    # TODO(arl): argh the travelling salesman problem
+    return positions
+
+
+
+
 
 
 class MicroplateWell(object):
@@ -98,16 +133,29 @@ class Microplate(object):
         return positions
 
 
+    def full_plate_config(self):
+        # make the serperntine pattern
+        return serpentine(self.rows, self.columns)
+
+    def custom_plate_config(self, use_positions):
+        return custom_plate_config(use_positions)
+
+
+
     def create(self,
+               use_positions=[],
                num_positions_per_well=1,
                z_pos=0.,
                fov_mm=(0.530,0.400)):
 
         self._wells = []
 
-        # make the serperntine pattern
-        pattern = serpentine(self.rows, self.columns)
+        if use_positions:
+            pattern = self.custom_plate_config(use_positions)
+        else:
+            pattern = self.full_plate_config()
 
+        # set up the wells for the given pattern
         for px, py in pattern:
             # set up the wells according to the plate configuration
             x0, y0 = self.offset_mm
@@ -140,7 +188,7 @@ class Microplate(object):
 
     def export(self, filename):
         """ export the positions to micromanager """
-        utils.write_micromanager_stage_positions(filename, self.positions)
+        utils.write_micromanager_stage_positions(filename, self.positions, use_Z=False)
 
 
 
@@ -199,10 +247,12 @@ def visualise_microplate(plate):
 
 
 if __name__ == "__main__":
+    pos_list = ['1A','2A','3A','4B','6C','2D','4A']
     plate = Microplate24Well()
-    plate.create(num_positions_per_well=16)
+    # plate.create(num_positions_per_well=16)
+    plate.create(use_positions=pos_list)
 
-    test_fn = "./data/microplate.pos"
-    plate.export(test_fn)
+    # test_fn = "./data/microplate.pos"
+    # plate.export(test_fn)
 
     plate.visualise()
