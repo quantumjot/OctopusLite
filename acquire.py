@@ -202,7 +202,7 @@ class AcquisitionManager(object):
     def build_triggers(self):
         """ build a list of triggers using the config """
         self._triggers = []
-        for t in self._params["triggers"]:
+        for t in self._params["triggers"] if t.get("use", True):
             logger.info("Adding trigger: {}".format(t.keys()[0]))
             self._triggers.append(triggers.Trigger(t))
 

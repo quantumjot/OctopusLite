@@ -120,7 +120,7 @@ def read_micromanager_stage_positions(filename):
     return positions
 
 
-def write_micromanager_stage_positions(filename, positions):
+def write_micromanager_stage_positions(filename, positions, use_Z=True):
     """ write out a micromanager compatible list of stage positions
 
     TODO(arl): json ordering is probably important to micromanager
@@ -153,8 +153,12 @@ def write_micromanager_stage_positions(filename, positions):
         fw = {"Device": {"type": "STRING", "scalar": "Fast Filter Wheel"},
               "Position_um": {"type": "DOUBLE", "array": [0.0]}}
 
-        z = {"Device": {"type": "STRING", "scalar": "ZStage"},
-             "Position_um": {"type": "DOUBLE", "array": [pz]}}
+        # don't write out Z positions with microplates etc
+        if use_Z:
+            z = {"Device": {"type": "STRING", "scalar": "ZStage"},
+                 "Position_um": {"type": "DOUBLE", "array": [pz]}}
+        else:
+            z = {}
 
         xy = {"Device": {"type": "STRING", "scalar": "XYStage"},
               "Position_um": {"type": "DOUBLE", "array": [px, py]}}

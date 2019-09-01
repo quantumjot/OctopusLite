@@ -20,6 +20,10 @@ import heapq
 import numpy as np
 
 
+MICROPLATE_WIDTH_MM = 127.5
+MICROPLATE_HEIGHT_MM = 85.0
+CAMERA_FOV_MM = (0.53, 0.40)
+
 
 def serpentine(rows, columns):
     """ Make a serpentine pattern """
@@ -105,8 +109,8 @@ class Microplate(object):
 
     """
     def __init__(self):
-        self.width_mm = 127.5
-        self.height_mm = 85.0
+        self.width_mm = MICROPLATE_WIDTH_MM
+        self.height_mm = MICROPLATE_HEIGHT_MM
 
         self.offset_mm = None
         self.spacing_mm = None
@@ -146,7 +150,7 @@ class Microplate(object):
                use_positions=[],
                num_positions_per_well=1,
                z_pos=0.,
-               fov_mm=(0.530,0.400)):
+               fov_mm=CAMERA_FOV_MM):
 
         self._wells = []
 
