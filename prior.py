@@ -112,10 +112,11 @@ class ProScanController(object):
             logger.error("Stage move timed out. Exiting")
             raise Exception("Stage move failed")
 
-    def TTL(self, **kwargs):
-        self.ttl(**kwargs)
+    def ttl(self, **kwargs):
+        raise DeprecationWarning("Use prior.TTL")
+        self.TTL(**kwargs)
 
-    def ttl(self, pin=0, state=False):
+    def TTL(self, pin=0, state=False):
         """ change the state of one of the ttl pins """
         assert(isinstance(pin, int) and pin>=0 and pin<4)
         assert(isinstance(state, bool))
