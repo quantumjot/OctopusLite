@@ -179,7 +179,7 @@ def write_micromanager_stage_positions(filename, positions, use_Z=True):
 
 def read_experiment_params(filename="params.json"):
     with open(filename, 'r') as exp_params:
-        params = json.load( exp_params)
+        params = json.load(exp_params)
     return params
 
 def check_and_makedir(folder_name):
